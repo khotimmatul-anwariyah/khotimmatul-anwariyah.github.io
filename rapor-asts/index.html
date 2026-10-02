@@ -238,7 +238,7 @@ const MAPEL=["Pendidikan Agama dan Budi Pekerti","Pendidikan Jasmani Olahraga da
 const ID_FIELDS=["Nama_Siswa","NISN","Kelas","Nama_Wali","NIP_Wali"];
 const FIELDS=[...ID_FIELDS];
 for(let n=1;n<=12;n++)FIELDS.push("KKM_"+n,"ASTS_"+n,"Harian_"+n);
-for(let k=1;k<=3;k++)FIELDS.push("Ekskul_"+k,"NilaiEkskul_"+k);
+for(let k=1;k<=5;k++)FIELDS.push("Ekskul_"+k,"NilaiEkskul_"+k);
 FIELDS.push("Catatan");
 const norm=s=>String(s==null?"":s).trim().toLowerCase().replace(/[\s\-.]+/g,"_");
 const CANON={};FIELDS.forEach(f=>CANON[norm(f)]=f);
@@ -251,7 +251,7 @@ function sampleStudents(){
   const base=[["Aditya Rahman Pratama","0112345671",[82,85,78,88,74,80,90,84,86,83,79,81],[85,80,82,86,78,84,88,80,85,87,82,84],["Pramuka","B"],["Futsal","A"],"Aktif dan bertanggung jawab. Pertahankan semangat belajar, tingkatkan ketelitian dalam Matematika."],
     ["Nabila Putri Lestari","0112345672",[90,88,92,94,86,91,95,93,89,90,87,92],[92,90,90,95,88,93,94,92,90,91,89,90],["Pramuka","A"],["Paduan Suara","A"],"Prestasi sangat baik dan konsisten. Terus menjadi teladan bagi teman-teman."],
     ["Rizky Maulana Hidayat","0112345673",[70,76,72,68,62,71,80,66,78,74,73,77],[74,80,75,72,66,70,82,70,80,76,75,79],["Pramuka","B"],["",""],"Perlu meningkatkan kehadiran dan latihan soal di rumah, khususnya Matematika dan Bahasa Inggris."]];
-  return base.map(([nm,nisn,a,h,e1,e2,cat])=>{const s={Nama_Siswa:nm,NISN:nisn,Kelas:"VIII-A",Nama_Wali:"Contoh Wali Kelas",NIP_Wali:"-",Catatan:cat,Ekskul_1:e1[0],NilaiEkskul_1:e1[1],Ekskul_2:e2[0],NilaiEkskul_2:e2[1],Ekskul_3:"",NilaiEkskul_3:""};
+  return base.map(([nm,nisn,a,h,e1,e2,cat])=>{const s={Nama_Siswa:nm,NISN:nisn,Kelas:"VIII-A",Nama_Wali:"Contoh Wali Kelas",NIP_Wali:"-",Catatan:cat,Ekskul_1:e1[0],NilaiEkskul_1:e1[1],Ekskul_2:e2[0],NilaiEkskul_2:e2[1],Ekskul_3:"",NilaiEkskul_3:"",Ekskul_4:"",NilaiEkskul_4:"",Ekskul_5:"",NilaiEkskul_5:""};
     for(let n=1;n<=12;n++){s["KKM_"+n]=75;s["ASTS_"+n]=a[n-1];s["Harian_"+n]=h[n-1];}return s;});
 }
 
@@ -383,7 +383,7 @@ function renderPaper(c){
   const N=$("notes");
   if(c.issues.length){N.hidden=false;N.innerHTML=`<b>Perlu dicek sebelum dicetak (tidak ikut tercetak):</b><ul>${c.issues.map(t=>`<li>${esc(t)}</li>`).join("")}</ul>`;}else N.hidden=true;
   const rows=c.rows.map(r=>`<tr><td class="c">${r.no}</td><td>${esc(r.mapel)}</td><td class="c">${fmtVal(r.kkm)}</td><td class="c">${fmtVal(r.asts)}</td><td class="c">${fmtVal(r.harian)}</td><td class="c">${fmt2(r.rata)}</td><td class="c">${r.ket}</td></tr>`).join("");
-  const ek=[1,2,3].map(k=>`<tr><td class="c">${k}</td><td>${esc(s["Ekskul_"+k])}</td><td class="c">${esc(s["NilaiEkskul_"+k])}</td></tr>`).join("");
+  const ek=[1,2,3,4,5].map(k=>`<tr><td class="c">${k}</td><td>${esc(s["Ekskul_"+k])}</td><td class="c">${esc(s["NilaiEkskul_"+k])}</td></tr>`).join("");
   $("paper").innerHTML=`
   <div class="kop"><img src="${LOGO}" alt="Logo Sekolah Rakyat"><div><div class="kt">${esc(S.kopJudul)}</div><div class="kl">Nama Siswa: ${esc(s.Nama_Siswa)}<br>Semester: ${esc(S.semester)} ${esc(S.tp)}<br>Nama Sekolah: ${esc(S.sekolah)}</div></div></div>
   <div class="t1">LAPORAN HASIL ASESMEN SUMATIF TENGAH SEMESTER</div>
@@ -424,7 +424,7 @@ function drawRapor(doc,s,c){
     columnStyles:{0:{halign:"center",cellWidth:9},1:{cellWidth:"auto"},2:{halign:"center",cellWidth:22},3:{halign:"center",cellWidth:16},4:{halign:"center",cellWidth:19},5:{halign:"center",cellWidth:19},6:{halign:"center",cellWidth:24}}});
   y=doc.lastAutoTable.finalY+6;
   doc.setFont("helvetica","bold");doc.setFontSize(10);doc.text("B.   Kegiatan Ekstrakurikuler",M,y);y+=2;
-  doc.autoTable({...grid,startY:y,head:[["No","Ekstrakurikuler","Nilai"]],body:[1,2,3].map(k=>[k,String(s["Ekskul_"+k]||""),String(s["NilaiEkskul_"+k]||"")]),
+  doc.autoTable({...grid,startY:y,head:[["No","Ekstrakurikuler","Nilai"]],body:[1,2,3,4,5].map(k=>[k,String(s["Ekskul_"+k]||""),String(s["NilaiEkskul_"+k]||"")]),
     columnStyles:{0:{halign:"center",cellWidth:9},2:{halign:"center",cellWidth:35}}});
   y=doc.lastAutoTable.finalY+6;
   doc.setFont("helvetica","bold");doc.setFontSize(10);doc.text("Catatan Wali Kelas:",M,y);y+=2;
@@ -459,7 +459,7 @@ const safe=t=>String(t||"").replace(/[^\w\- ]+/g,"").trim().replace(/\s+/g,"_")|
 
 /* ---------- templat Excel ---------- */
 function templateWb(){
-  const hdr=[...ID_FIELDS];for(let n=1;n<=12;n++)hdr.push("KKM_"+n,"ASTS_"+n,"Harian_"+n);for(let k=1;k<=3;k++)hdr.push("Ekskul_"+k,"NilaiEkskul_"+k);hdr.push("Catatan");
+  const hdr=[...ID_FIELDS];for(let n=1;n<=12;n++)hdr.push("KKM_"+n,"ASTS_"+n,"Harian_"+n);for(let k=1;k<=5;k++)hdr.push("Ekskul_"+k,"NilaiEkskul_"+k);hdr.push("Catatan");
   const ex=hdr.map(h=>h==="Nama_Siswa"?"CONTOH SISWA (hapus/ganti)":h==="NISN"?"0000000000":h==="Kelas"?"VIII-A":h==="Nama_Wali"?"Nama Wali Kelas":h==="NIP_Wali"?"-":/^KKM_/.test(h)?75:h==="Ekskul_1"?"Pramuka":h==="NilaiEkskul_1"?"B":h==="Catatan"?"Contoh catatan wali kelas.":"");
   const ws=XLSX.utils.aoa_to_sheet([hdr,ex]);
   ["B2","C2","E2"].forEach(a=>{ws[a].t="s";ws[a].z="@";});
