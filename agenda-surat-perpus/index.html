@@ -141,16 +141,16 @@ tbody tr.batal td.perihal{text-decoration:line-through}
     </div>
     <div class="empty" id="empty"></div>
   </div>
-  <p class="help">Surat yang batal dikirim diberi status "Dibatalkan" agar urutan nomor di agenda tetap utuh. Data tersimpan di Google Sheets perpustakaan.</p>
+  <p class="help">Surat yang batal dikirim diberi status "Dibatalkan" agar urutan nomor di agenda tetap utuh. <span id="helpData">Data tersimpan di Google Sheets perpustakaan.</span></p>
 </div>
 
 <!-- Masuk -->
 <div class="overlay" id="loginOverlay" hidden>
   <form class="dialog small" id="loginForm" novalidate>
     <h2>Masuk ke agenda</h2>
-    <p class="help">Masukkan kunci akses dari Kepala Perpustakaan dan nama Anda sebagai pencatat.</p>
+    <p class="help" id="loginHelp">Masukkan kunci akses dari Kepala Perpustakaan dan nama Anda sebagai pencatat.</p>
     <label>Nama petugas<input id="lNama" type="text" autocomplete="name" required placeholder="Contoh: Bu Poppy"></label>
-    <label>Kunci akses<input id="lKunci" type="password" autocomplete="current-password" required></label>
+    <label id="lKunciWrap">Kunci akses<input id="lKunci" type="password" autocomplete="current-password" required></label>
     <div class="err" id="loginErr"></div>
     <div class="foot"><button type="submit" class="btn primary" id="btnLogin">Masuk</button></div>
   </form>
@@ -198,6 +198,7 @@ window.AGENDA_CONFIG = {
 <script>
 (function(){
   const CFG = window.AGENDA_CONFIG || {};
+  const PESAN_LOKAL="Mode sementara: surat yang dicatat tersimpan di browser perangkat ini saja dan belum masuk ke Google Spreadsheet. Isi API_URL di bagian PENGATURAN agar data tersinkron untuk semua petugas.";
   const API = (CFG.API_URL || "").trim();
   const JENIS=["Surat dinas","SOP","Surat keterangan bebas pustaka","Surat undangan","Surat pemberitahuan","Laporan","Lainnya"];
   const STATUS=["Draf","Ditandatangani","Terkirim","Dibatalkan"];
@@ -221,11 +222,31 @@ window.AGENDA_CONFIG = {
   function notice(t){$("notice").textContent=t||"";$("notice").hidden=!t;}
   function live(on,text){$("live").classList.toggle("on",on);$("liveText").textContent=text;}
 
+  /* ---- Mode lokal: dipakai selama API_URL belum diisi. Data tersimpan di browser perangkat ini saja. ---- */
+  const LOKAL=!API, KEY_LOKAL="agenda_surat_lokal";
+  function bacaLokal(){try{return JSON.parse(localStorage.getItem(KEY_LOKAL)||"[]");}catch(e){return [];}}
+  function tulisLokal(list){try{localStorage.setItem(KEY_LOKAL,JSON.stringify(list));return true;}catch(e){return false;}}
+  function postLokal(aksi,d){
+    const list=bacaLokal();
+    if(aksi==="tambah"){
+      const tahun=Number(d.tanggal.slice(0,4)),bulan=Number(d.tanggal.slice(5,7));
+      const urut=list.filter(r=>r.tahun===tahun).reduce((m,r)=>Math.max(m,r.urut||0),0)+1;
+      const row=Object.assign({},d,{id:tahun+"-"+pad(urut),urut,tahun,bulan,nomor:nomor(urut,bulan,tahun),dibuatPada:new Date().toISOString(),diubahPada:""});
+      list.push(row);if(!tulisLokal(list))return {ok:false,pesan:"Browser ini tidak mengizinkan penyimpanan. Coba buka di Chrome biasa (bukan mode penyamaran)."};
+      return {ok:true,data:row};
+    }
+    const i=list.findIndex(r=>r.id===d.id);if(i<0)return {ok:false,pesan:"Catatan surat tidak ditemukan."};
+    list[i]=Object.assign(list[i],d,{diubahPada:new Date().toISOString()});tulisLokal(list);return {ok:true};
+  }
+  window.addEventListener("storage",e=>{if(LOKAL&&e.key===KEY_LOKAL&&kunci)muat(true);});
+
   async function apiGet(){
+    if(LOKAL)return {ok:true,data:bacaLokal()};
     const r=await fetch(API+"?kunci="+encodeURIComponent(kunci)+"&t="+Date.now());
     return r.json();
   }
   async function apiPost(aksi,data){
+    if(LOKAL)return postLokal(aksi,data);
     const r=await fetch(API,{method:"POST",body:JSON.stringify({kunci,aksi,data})});
     return r.json();
   }
@@ -236,8 +257,8 @@ window.AGENDA_CONFIG = {
       const res=await apiGet();
       if(!res.ok){ if(/kunci/i.test(res.pesan||"")){keluar("Kunci akses tidak berlaku lagi. Masuk kembali.");} else notice(res.pesan); return; }
       rows=(res.data||[]).sort((a,b)=>(b.tahun-a.tahun)||(b.urut-a.urut));
-      const t=new Date();live(true,"Diperbarui "+String(t.getHours()).padStart(2,"0")+"."+String(t.getMinutes()).padStart(2,"0"));
-      notice("");render();if(!$("overlay").hidden)updatePreview();
+      const t=new Date();live(true,(LOKAL?"Tersimpan di perangkat ini · ":"Diperbarui ")+String(t.getHours()).padStart(2,"0")+"."+String(t.getMinutes()).padStart(2,"0"));
+      notice(LOKAL?PESAN_LOKAL:"");render();if(!$("overlay").hidden)updatePreview();
     }catch(e){live(false,"Terputus");if(!diam)notice("Tidak dapat terhubung ke Google Sheets. Periksa koneksi internet, lalu muat ulang halaman.");}
     finally{loading=false;}
   }
@@ -332,13 +353,13 @@ window.AGENDA_CONFIG = {
     const b=document.createElement("button");b.type="button";b.textContent="Keluar";b.onclick=()=>keluar("");m.appendChild(b);
   }
   function keluar(pesan){
-    kunci="";store.del("agenda_kunci");rows=[];render();$("me").hidden=true;$("btnAdd").disabled=true;
+    kunci="";store.del("agenda_kunci");if(LOKAL)store.del("agenda_nama");rows=[];render();$("me").hidden=true;$("btnAdd").disabled=true;
     clearInterval(timer);live(false,"Belum terhubung");$("loginErr").textContent=pesan||"";$("lNama").value=nama;$("loginOverlay").hidden=false;
   }
   $("loginForm").addEventListener("submit",async e=>{
     e.preventDefault();
-    const n=$("lNama").value.trim(), k=$("lKunci").value;
-    if(!n||!k){$("loginErr").textContent="Isi nama petugas dan kunci akses.";return;}
+    const n=$("lNama").value.trim(), k=LOKAL?"lokal":$("lKunci").value;
+    if(!n||!k){$("loginErr").textContent=LOKAL?"Isi nama petugas.":"Isi nama petugas dan kunci akses.";return;}
     $("btnLogin").disabled=true;$("loginErr").textContent="";
     try{
       kunci=k;const res=await apiGet();
@@ -357,7 +378,12 @@ window.AGENDA_CONFIG = {
 
   if(CFG.SHEET_URL){$("btnSheet").href=CFG.SHEET_URL;$("btnSheet").hidden=false;}
   render();
-  if(!API){notice("Halaman belum tersambung ke Google Sheets. Isi API_URL di bagian PENGATURAN file ini (lihat README.md).");}
+  if(LOKAL){
+    notice(PESAN_LOKAL);$("helpData").textContent="Data sementara tersimpan di browser perangkat ini.";
+    $("lKunciWrap").hidden=true;$("loginHelp").textContent="Tulis nama Anda sebagai pencatat surat.";
+    nama=store.get("agenda_nama");
+    if(nama){kunci="lokal";mulai();} else $("loginOverlay").hidden=false;
+  }
   else{
     kunci=store.get("agenda_kunci");nama=store.get("agenda_nama");
     if(kunci&&nama)mulai(); else {$("lNama").value=nama;$("loginOverlay").hidden=false;}
