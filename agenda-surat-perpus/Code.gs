@@ -25,12 +25,18 @@ const STATUS = ['Draf', 'Ditandatangani', 'Terkirim', 'Dibatalkan'];
 function siapkan() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let sh = ss.getSheetByName(NAMA_SHEET);
-  if (!sh) sh = ss.insertSheet(NAMA_SHEET);
+  if (!sh) {
+    const pertama = ss.getSheets()[0];
+    if (ss.getSheets().length === 1 && pertama.getLastRow() === 0) { sh = pertama; sh.setName(NAMA_SHEET); }
+    else sh = ss.insertSheet(NAMA_SHEET);
+  }
   sh.getRange(1, 1, 1, JUDUL.length).setValues([JUDUL]).setFontWeight('bold');
   sh.setFrozenRows(1);
   sh.getRange('A:A').setNumberFormat('@'); // id disimpan sebagai teks
   sh.getRange('E:F').setNumberFormat('@'); // tanggal (yyyy-mm-dd) dan nomor surat sebagai teks
   sh.getRange('O:P').setNumberFormat('@'); // waktu dicatat dan diubah sebagai teks
+  sh.setColumnWidths(1, 16, 120); sh.setColumnWidth(6, 230); sh.setColumnWidth(8, 300);
+  buatRekap_(ss);
   PropertiesService.getScriptProperties().setProperty('KUNCI_AKSES', KUNCI_AWAL);
   Logger.log('Siap. Kunci akses tersimpan.');
 }
@@ -161,4 +167,34 @@ function impor_(d) {
     ids[id] = true; masuk++;
   });
   return { ok: true, masuk: masuk, bentrok: bentrok };
+}
+
+/** Sheet Rekap: jumlah surat per bulan, per status, dan per jenis untuk tahun di sel C3. */
+function buatRekap_(ss) {
+  if (ss.getSheetByName('Rekap')) return;
+  const rk = ss.insertSheet('Rekap');
+  const BULAN = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+  const JENIS = ['Surat dinas','SOP','Surat keterangan bebas pustaka','Surat undangan','Surat pemberitahuan','Laporan','Lainnya'];
+  rk.getRange('B1').setValue('Rekap Agenda Surat Keluar').setFontWeight('bold').setFontSize(14);
+  rk.getRange('B3').setValue('Tahun rekap').setFontWeight('bold');
+  rk.getRange('C3').setValue(new Date().getFullYear()).setBackground('#FFFF00').setFontWeight('bold');
+  rk.getRange('D3').setValue('← ubah tahun di sel kuning').setFontStyle('italic').setFontColor('#5D6876');
+  let r = 5;
+  const blok = (judul, labels, kol, kriteria) => {
+    rk.getRange(r, 2, 1, 2).setValues([[judul, 'Jumlah']]).setFontWeight('bold').setFontColor('#FFFFFF').setBackground('#1F5F8B');
+    const awal = r + 1;
+    labels.forEach((lab, i) => {
+      const baris = awal + i;
+      rk.getRange(baris, 2).setValue(lab);
+      rk.getRange(baris, 3).setFormula('=COUNTIFS(Agenda!$C$2:$C,$C$3,Agenda!$' + kol + '$2:$' + kol + ',' + kriteria(i, baris) + ')');
+    });
+    const tot = awal + labels.length;
+    rk.getRange(tot, 2).setValue('Total').setFontWeight('bold');
+    rk.getRange(tot, 3).setFormula('=SUM(C' + awal + ':C' + (tot - 1) + ')').setFontWeight('bold');
+    r = tot + 2;
+  };
+  blok('Per bulan', BULAN, 'D', i => i + 1);
+  blok('Per status', STATUS, 'K', (i, b) => 'B' + b);
+  blok('Per jenis dokumen', JENIS, 'G', (i, b) => 'B' + b);
+  rk.setColumnWidth(2, 260); rk.setColumnWidth(3, 90);
 }

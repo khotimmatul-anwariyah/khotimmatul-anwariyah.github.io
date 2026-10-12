@@ -218,12 +218,14 @@ tbody tr.batal td.perihal{text-decoration:line-through}
     </div>
     <details class="cara"><summary>Cara mendapatkan URL Apps Script</summary>
       <ol>
-        <li>Buka Google Spreadsheet agenda (dari template <b>Template_Agenda_Surat_Keluar.xlsx</b>).</li>
-        <li>Pilih <b>Ekstensi → Apps Script</b>, tempel isi <b>Code.gs</b>, lalu ganti kunci akses pada baris <code>KUNCI_AWAL</code>.</li>
-        <li>Pilih fungsi <b>siapkan</b>, tekan <b>Jalankan</b>, dan izinkan akses.</li>
+        <li>Buka <a href="https://sheets.new" target="_blank" rel="noopener">sheets.new</a> untuk membuat Google Spreadsheet baru, lalu beri nama, misalnya <i>Agenda Surat Keluar Perpustakaan</i>.</li>
+        <li>Pilih <b>Ekstensi → Apps Script</b>. Hapus isi editor, lalu tempel kode dari tombol <b>Salin Code.gs</b> di bawah.</li>
+        <li>Ganti <code>ganti-dengan-kunci-rahasia</code> pada baris <code>KUNCI_AWAL</code> dengan kunci akses perpustakaan.</li>
+        <li>Simpan, pilih fungsi <b>siapkan</b>, tekan <b>Jalankan</b>, lalu izinkan akses. Sheet <b>Agenda</b> dan <b>Rekap</b> dibuat otomatis.</li>
         <li>Pilih <b>Terapkan → Deployment baru → Aplikasi web</b>. Jalankan sebagai: <b>Saya</b>. Yang memiliki akses: <b>Siapa saja</b>.</li>
         <li>Salin <b>URL aplikasi web</b> (berakhiran <code>/exec</code>) ke kolom di atas.</li>
       </ol>
+      <div class="row" style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap"><button type="button" class="btn" id="sSalinKode">Salin Code.gs</button><a class="btn" href="Code.gs" target="_blank" rel="noopener">Lihat Code.gs</a></div>
       <p class="help" style="margin-top:8px">Link spreadsheet biasa (docs.google.com) tidak bisa dipakai untuk menyimpan data dari web. Yang dibutuhkan adalah URL Apps Script.</p>
     </details>
     <div class="foot">
@@ -707,6 +709,9 @@ window.AGENDA_CONFIG = {
   $("sTutup").onclick=()=>{$("sambungOverlay").hidden=true;};
   $("sambungOverlay").addEventListener("click",e=>{if(e.target===$("sambungOverlay"))$("sambungOverlay").hidden=true;});
   $("sSalin").onclick=async()=>{const v=$("sLink").value;try{await navigator.clipboard.writeText(v);toast("Tautan disalin. Kirim ke petugas lain.");}catch(e){$("sLink").select();toast("Tekan Ctrl+C untuk menyalin.");}};
+  $("sSalinKode").onclick=async()=>{
+    try{const t=await (await fetch("Code.gs?t="+Date.now())).text();await navigator.clipboard.writeText(t);toast("Code.gs disalin. Tempel di editor Apps Script.");}
+    catch(e){toast("Belum bisa menyalin otomatis. Klik \"Lihat Code.gs\", lalu salin semua isinya.");}};
   $("sPutus").onclick=()=>{try{localStorage.removeItem(KEY_SAMBUNG);store.del("agenda_kunci");}catch(e){}location.reload();};
   $("sambungForm").addEventListener("submit",async e=>{
     e.preventDefault();
