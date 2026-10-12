@@ -8,6 +8,9 @@ Web pencatatan surat dan dokumen keluar perpustakaan yang tersinkron dengan **Go
   - Bulan ditulis dengan angka biasa, bukan angka Romawi.
   - Nomor urut dimulai lagi dari 001 setiap tahun.
 - Web hanya bisa dibuka dengan **kunci akses** dari Kepala Perpustakaan.
+- Setiap nomor surat punya tombol **PDF** (bukti penomoran bertanda tangan Kepala Perpustakaan) dan **Excel** (keterangan surat). Di HP ada tombol **Bagikan** untuk mengirim PDF lewat WhatsApp atau email.
+- Tombol **Unduh Excel** dan **Unduh PDF** di bagian atas mengunduh daftar agenda sesuai filter yang dipilih.
+- Nama dan NIP penanda tangan PDF diatur di bagian **PENGATURAN** (`KEPALA_NAMA`, `KEPALA_NIP`).
 
 ## Isi paket
 

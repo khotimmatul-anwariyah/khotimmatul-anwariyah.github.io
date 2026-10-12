@@ -53,7 +53,10 @@ input,select,textarea{font:400 14px var(--body);color:var(--ink);background:var(
 textarea{resize:vertical;min-height:60px}
 .panel{background:var(--paper);border:1px solid var(--line);border-radius:10px;overflow:hidden}
 .scroll{overflow-x:auto}
-table{border-collapse:collapse;width:100%;min-width:980px}
+table{border-collapse:collapse;width:100%;min-width:1120px}
+.rowacts{display:flex;flex-wrap:wrap;gap:4px;justify-content:flex-end;min-width:150px}
+.rowbtn.dl{color:var(--ink);border-color:var(--line)}
+.rowbtn.dl:hover{border-color:var(--accent);color:var(--accent)}
 th,td{padding:10px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
 th{background:var(--soft);font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);white-space:nowrap}
 td.n{font-variant-numeric:tabular-nums;color:var(--muted);width:48px}
@@ -105,7 +108,8 @@ tbody tr.batal td.perihal{text-decoration:line-through}
       <span class="live" id="live"><span class="dot"></span><span id="liveText">Belum terhubung</span></span>
       <span class="me" id="me" hidden></span>
       <a class="btn" id="btnSheet" href="#" target="_blank" rel="noopener" hidden>Buka spreadsheet</a>
-      <button class="btn" id="btnCsv">Unduh CSV</button>
+      <button class="btn" id="btnXls" title="Unduh daftar surat sesuai filter dalam format Excel">Unduh Excel</button>
+      <button class="btn" id="btnPdf" title="Unduh daftar surat sesuai filter dalam format PDF">Unduh PDF</button>
       <button class="btn primary" id="btnAdd" disabled>+ Catat surat keluar</button>
     </div>
   </header>
@@ -185,6 +189,230 @@ tbody tr.batal td.perihal{text-decoration:line-through}
 <div class="toast" id="toast" hidden></div>
 
 <script>
+/* ============ Ekspor PDF & Excel (tanpa pustaka luar) ============ */
+(function(){
+  const BULAN=["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
+  const W1=[278,278,355,556,556,889,667,191,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,278,278,584,584,584,556,1015,667,667,722,722,667,611,778,722,278,500,667,556,833,722,778,667,778,722,667,611,722,667,944,667,667,611,278,278,278,469,556,333,556,556,500,556,556,278,556,556,222,222,500,222,833,556,556,556,556,333,500,278,556,500,722,500,500,500,334,260,334,584];
+  const W2=[278,333,474,556,556,889,722,238,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,333,333,584,584,584,611,975,722,722,722,722,667,611,778,722,278,556,722,611,833,722,778,667,778,722,667,611,722,667,944,667,667,611,333,278,333,584,556,333,556,611,556,611,556,333,611,611,278,278,556,278,889,611,611,611,611,389,556,333,611,556,778,556,556,500,389,280,389,584];
+  const WIN={0x2013:150,0x2014:151,0x2018:145,0x2019:146,0x201C:147,0x201D:148,0x2026:133,0x2022:149,0x20AC:128,0x2122:153};
+
+  /* ---------- teks & ukuran ---------- */
+  function enc(s){let o="";for(const ch of String(s==null?"":s)){const c=ch.codePointAt(0);
+    if(c===9||c===10||c===13){o+=" ";continue;}
+    if(c>=32&&c<256&&!(c>=127&&c<160))o+=String.fromCharCode(c);else if(WIN[c])o+=String.fromCharCode(WIN[c]);else o+="?";}return o;}
+  function cw(c,b){if(c>=32&&c<=126)return (b?W2:W1)[c-32];if(c===150)return 556;if(c===151||c===133)return 1000;
+    if(c===145||c===146)return b?278:222;if(c===147||c===148)return b?500:333;if(c===149)return 350;if(c===183)return 278;return 556;}
+  function lebar(s,size,bold){const t=enc(s);let w=0;for(let i=0;i<t.length;i++)w+=cw(t.charCodeAt(i),bold);return w*size/1000;}
+  function bungkus(s,size,bold,max){
+    const words=String(s==null?"":s).replace(/\s+/g," ").trim().split(" ").filter(Boolean);const out=[];let cur="";
+    for(let w of words){const coba=cur?cur+" "+w:w;if(lebar(coba,size,bold)<=max){cur=coba;continue;}
+      if(cur)out.push(cur);cur="";
+      while(lebar(w,size,bold)>max){let k=w.length;while(k>1&&lebar(w.slice(0,k),size,bold)>max)k--;out.push(w.slice(0,k));w=w.slice(k);}
+      cur=w;}
+    if(cur)out.push(cur);return out.length?out:[""];}
+
+  /* ---------- penulis PDF ---------- */
+  const n2=v=>String(Math.round(v*100)/100);
+  function rgb(hex){const v=parseInt(String(hex||"#000000").slice(1),16);return [(v>>16)&255,(v>>8)&255,v&255].map(x=>n2(x/255)).join(" ");}
+  function Pdf(w,h,judul){this.W=w;this.H=h;this.judul=judul||"";this.pages=[];this.img=null;}
+  Pdf.prototype.halaman=function(){const p={ops:[]};this.pages.push(p);this.cur=p;return p;};
+  Pdf.prototype.teks=function(x,y,s,o){o=o||{};const size=o.size||10,bold=!!o.bold;let xx=x;
+    if(o.align==="center")xx=x-lebar(s,size,bold)/2;else if(o.align==="right")xx=x-lebar(s,size,bold);
+    const t=enc(s).replace(/\\/g,"\\\\").replace(/\(/g,"\\(").replace(/\)/g,"\\)");
+    this.cur.ops.push(`BT /${bold?"F2":"F1"} ${n2(size)} Tf ${rgb(o.color)} rg ${n2(xx)} ${n2(this.H-y)} Td (${t}) Tj ET`);};
+  Pdf.prototype.kotak=function(x,y,w,h,o){o=o||{};let s="q ";if(o.fill)s+=rgb(o.fill)+" rg ";
+    if(o.stroke)s+=rgb(o.stroke)+" RG "+n2(o.lw||0.6)+" w ";
+    s+=`${n2(x)} ${n2(this.H-y-h)} ${n2(w)} ${n2(h)} re ${o.fill&&o.stroke?"B":o.fill?"f":"S"} Q`;this.cur.ops.push(s);};
+  Pdf.prototype.garis=function(x1,y1,x2,y2,o){o=o||{};
+    this.cur.ops.push(`q ${rgb(o.color)} RG ${n2(o.lw||0.6)} w ${n2(x1)} ${n2(this.H-y1)} m ${n2(x2)} ${n2(this.H-y2)} l S Q`);};
+  Pdf.prototype.gambar=function(x,y,w,h){if(this.img)this.cur.ops.push(`q ${n2(w)} 0 0 ${n2(h)} ${n2(x)} ${n2(this.H-y-h)} cm /Im1 Do Q`);};
+  Pdf.prototype.blob=function(){
+    const objs=[];const add=s=>{objs.push(s);return objs.length;};
+    const cat=add(""),pages=add("");
+    const f1=add("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>");
+    const f2=add("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>");
+    let im=0;if(this.img)im=add(`<< /Type /XObject /Subtype /Image /Width ${this.img.w} /Height ${this.img.h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${this.img.bin.length} >>\nstream\n${this.img.bin}\nendstream`);
+    const kids=[];
+    for(const p of this.pages){const c=p.ops.join("\n");const cid=add(`<< /Length ${c.length} >>\nstream\n${c}\nendstream`);
+      kids.push(add(`<< /Type /Page /Parent ${pages} 0 R /MediaBox [0 0 ${n2(this.W)} ${n2(this.H)}] /Resources << /Font << /F1 ${f1} 0 R /F2 ${f2} 0 R >>${im?` /XObject << /Im1 ${im} 0 R >>`:""} >> /Contents ${cid} 0 R >>`));}
+    objs[cat-1]=`<< /Type /Catalog /Pages ${pages} 0 R >>`;
+    objs[pages-1]=`<< /Type /Pages /Kids [${kids.map(k=>k+" 0 R").join(" ")}] /Count ${kids.length} >>`;
+    const info=add(`<< /Title (${enc(this.judul).replace(/\\/g,"\\\\").replace(/\(/g,"\\(").replace(/\)/g,"\\)")}) /Producer (Agenda Surat Keluar Perpustakaan Rona Ilmu) >>`);
+    let out="%PDF-1.4\n%\xE2\xE3\xCF\xD3\n";const offs=[];
+    objs.forEach((o,i)=>{offs.push(out.length);out+=`${i+1} 0 obj\n${o}\nendobj\n`;});
+    const xref=out.length;
+    out+=`xref\n0 ${objs.length+1}\n0000000000 65535 f \n`+offs.map(o=>String(o).padStart(10,"0")+" 00000 n \n").join("");
+    out+=`trailer\n<< /Size ${objs.length+1} /Root ${cat} 0 R /Info ${info} 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+    const u=new Uint8Array(out.length);for(let i=0;i<out.length;i++)u[i]=out.charCodeAt(i)&255;
+    return new Blob([u],{type:"application/pdf"});};
+
+  let logoCache=null;
+  function logo(){
+    if(logoCache!==null)return logoCache;
+    try{const img=document.querySelector(".brand img");const c=document.createElement("canvas");c.width=c.height=240;
+      const g=c.getContext("2d");g.fillStyle="#ffffff";g.fillRect(0,0,240,240);g.drawImage(img,0,0,240,240);
+      logoCache={bin:atob(c.toDataURL("image/jpeg",0.92).split(",")[1]),w:240,h:240};}
+    catch(e){logoCache=false;}
+    return logoCache;}
+
+  function tglIndo(s){if(!s)return"";const [y,m,d]=String(s).slice(0,10).split("-").map(Number);if(!y||!m||!d)return String(s);return `${d} ${BULAN[m-1]} ${y}`;}
+  function waktuIndo(iso){if(!iso)return"";const d=new Date(iso);if(isNaN(d))return String(iso);
+    return `${d.getDate()} ${BULAN[d.getMonth()]} ${d.getFullYear()} pukul ${String(d.getHours()).padStart(2,"0")}.${String(d.getMinutes()).padStart(2,"0")}`;}
+  const sekarang=()=>waktuIndo(new Date().toISOString());
+
+  const ALAMAT="Jalan Pajajaran No. 50–52, Kelurahan Pasirkaliki, Kecamatan Cicendo, Kota Bandung, Provinsi Jawa Barat";
+  const BIRU="#1F5F8B",LEMBUT="#E3EEF6",GARIS="#C9D1DA",ABU="#5D6876",MERAH="#A83A32";
+
+  function kop(pdf,x0,x1,y0,ukLogo){
+    const L=logo();if(L){pdf.img=L;pdf.gambar(x0,y0,ukLogo,ukLogo);}
+    const tx=x0+ukLogo+12;
+    pdf.teks(tx,y0+ukLogo*0.34,"PERPUSTAKAAN RONA ILMU",{size:ukLogo>50?15:13,bold:true});
+    pdf.teks(tx,y0+ukLogo*0.6,"SEKOLAH RAKYAT MENENGAH PERTAMA 9 BANDUNG",{size:ukLogo>50?10.5:9.5,bold:true});
+    bungkus(ALAMAT,8.5,false,x1-tx).forEach((l,i)=>pdf.teks(tx,y0+ukLogo*0.84+i*10,l,{size:8.5,color:ABU}));
+    const yg=y0+ukLogo+10;pdf.garis(x0,yg,x1,yg,{lw:1.6});pdf.garis(x0,yg+3,x1,yg+3,{lw:0.5});return yg+3;}
+
+  function baris(r){return [
+    ["Nomor Surat",r.nomor],["Tanggal Surat",tglIndo(r.tanggal)],["Jenis Dokumen",r.jenis],["Perihal",r.perihal],
+    ["Tujuan / Penerima",r.tujuan],["Penandatangan",r.penandatangan||"Kepala Perpustakaan"],["Status",r.status],
+    ["Lokasi Arsip",r.arsip||"-"],["Catatan",r.catatan||"-"],["Dicatat Oleh",r.dicatatOleh||"-"],
+    ["Dicatat Pada",waktuIndo(r.dibuatPada)||"-"]].concat(r.diubahPada?[["Terakhir Diubah",waktuIndo(r.diubahPada)]]:[]);}
+
+  /* Lembar keterangan satu nomor surat */
+  function pdfSurat(r,cfg){
+    cfg=cfg||{};const pdf=new Pdf(595.28,841.89,"Bukti Penomoran Surat "+r.nomor);pdf.halaman();
+    const X0=56,X1=539.28,CX=(X0+X1)/2;
+    let y=kop(pdf,X0,X1,44,58)+34;
+    pdf.teks(CX,y,"BUKTI PENOMORAN SURAT KELUAR",{size:13,bold:true,align:"center"});y+=19;
+    pdf.teks(CX,y,"Nomor: "+r.nomor,{size:12,bold:true,align:"center",color:BIRU});y+=8;
+    if(r.status==="Dibatalkan"){y+=14;pdf.teks(CX,y,"SURAT INI DIBATALKAN",{size:10.5,bold:true,align:"center",color:MERAH});}
+    y+=18;
+    const LW=150,VW=X1-X0-LW;
+    for(const [k,v] of baris(r)){
+      const lines=bungkus(v,10,false,VW-16),h=Math.max(1,lines.length)*13+11;
+      pdf.kotak(X0,y,LW,h,{fill:LEMBUT,stroke:GARIS});pdf.kotak(X0+LW,y,VW,h,{stroke:GARIS});
+      pdf.teks(X0+8,y+15.5,k,{size:9.5,bold:true});
+      lines.forEach((l,i)=>pdf.teks(X0+LW+8,y+15.5+i*13,l,{size:10,bold:k==="Nomor Surat"}));
+      y+=h;}
+    y+=34;
+    const SX=X1-95;
+    pdf.teks(SX,y,"Bandung, "+(tglIndo(r.tanggal)||""),{size:10.5,align:"center"});y+=15;
+    pdf.teks(SX,y,"Kepala Perpustakaan Rona Ilmu",{size:10.5,align:"center"});y+=62;
+    const nama=cfg.KEPALA_NAMA||"Kepala Perpustakaan";
+    pdf.teks(SX,y,nama,{size:10.5,bold:true,align:"center"});
+    const lw=lebar(nama,10.5,true);pdf.garis(SX-lw/2,y+2.5,SX+lw/2,y+2.5,{lw:0.7});
+    if(cfg.KEPALA_NIP){y+=14;pdf.teks(SX,y,"NIP. "+cfg.KEPALA_NIP,{size:10,align:"center"});}
+    pdf.garis(X0,800,X1,800,{lw:0.4,color:GARIS});
+    pdf.teks(X0,812,"Dibuat dari Agenda Surat Keluar Perpustakaan Rona Ilmu SRMP 9 Bandung · diunduh "+sekarang(),{size:7.5,color:ABU});
+    return pdf.blob();}
+
+  /* Daftar agenda (sesuai filter) */
+  function pdfAgenda(list,ket){
+    const pdf=new Pdf(841.89,595.28,"Agenda Surat Keluar Perpustakaan Rona Ilmu");
+    const X0=36,X1=805.89,BAWAH=595.28-42;
+    const KOL=[["No.",30],["Nomor Surat",150],["Tanggal",72],["Jenis",90],["Perihal",156],["Tujuan / Penerima",108],["Status",84],["Dicatat Oleh",79.89]];
+    const FS=8.5,LH=11,PAD=5;
+    function kepalaTabel(y){let x=X0;const h=20;for(const [t,w] of KOL){pdf.kotak(x,y,w,h,{fill:BIRU,stroke:BIRU});pdf.teks(x+PAD,y+13.5,t,{size:8.5,bold:true,color:"#FFFFFF"});x+=w;}return y+h;}
+    pdf.halaman();
+    let y=kop(pdf,X0,X1,30,42)+22;
+    pdf.teks(X0,y,"AGENDA SURAT KELUAR",{size:13,bold:true});
+    pdf.teks(X1,y,ket||"",{size:9,color:ABU,align:"right"});y+=10;
+    y=kepalaTabel(y);
+    if(!list.length){pdf.kotak(X0,y,X1-X0,24,{stroke:GARIS});pdf.teks(X0+PAD,y+15,"Tidak ada surat pada pilihan ini.",{size:FS,color:ABU});}
+    list.forEach((r,i)=>{
+      const vals=[String(r.urut),r.nomor,tglIndo(r.tanggal),r.jenis,r.perihal,r.tujuan,r.status,r.dicatatOleh||"-"];
+      const cells=vals.map((v,j)=>bungkus(v,FS,j===1,KOL[j][1]-PAD*2));
+      const h=Math.max(...cells.map(c=>c.length))*LH+PAD*2;
+      if(y+h>BAWAH){pdf.halaman();y=kepalaTabel(36);}
+      let x=X0;
+      cells.forEach((c,j)=>{const w=KOL[j][1];pdf.kotak(x,y,w,h,{fill:i%2?"#F5F7FA":null,stroke:GARIS});
+        c.forEach((l,k)=>pdf.teks(x+PAD,y+PAD+8+k*LH,l,{size:FS,bold:j===1,color:r.status==="Dibatalkan"?ABU:"#000000"}));x+=w;});
+      y+=h;});
+    const tot=pdf.pages.length,stamp="Diunduh "+sekarang();
+    pdf.pages.forEach((p,i)=>{pdf.cur=p;pdf.teks(X0,595.28-22,stamp,{size:7.5,color:ABU});pdf.teks(X1,595.28-22,`Halaman ${i+1} dari ${tot}`,{size:7.5,color:ABU,align:"right"});});
+    return pdf.blob();}
+
+  /* ---------- penulis XLSX ---------- */
+  const CRC=(()=>{const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;t[n]=c>>>0;}return t;})();
+  function crc32(b){let c=0xFFFFFFFF;for(let i=0;i<b.length;i++)c=CRC[(c^b[i])&255]^(c>>>8);return (c^0xFFFFFFFF)>>>0;}
+  function zip(files,type){
+    const te=new TextEncoder(),parts=[],central=[];let off=0;const d=new Date();
+    const time=(d.getHours()<<11)|(d.getMinutes()<<5)|(d.getSeconds()>>1),date=((d.getFullYear()-1980)<<9)|((d.getMonth()+1)<<5)|d.getDate();
+    for(const f of files){const name=te.encode(f.name),data=te.encode(f.data),crc=crc32(data);
+      const h=new DataView(new ArrayBuffer(30));
+      h.setUint32(0,0x04034b50,true);h.setUint16(4,20,true);h.setUint16(6,0x0800,true);h.setUint16(8,0,true);h.setUint16(10,time,true);h.setUint16(12,date,true);
+      h.setUint32(14,crc,true);h.setUint32(18,data.length,true);h.setUint32(22,data.length,true);h.setUint16(26,name.length,true);h.setUint16(28,0,true);
+      parts.push(new Uint8Array(h.buffer),name,data);
+      const c=new DataView(new ArrayBuffer(46));
+      c.setUint32(0,0x02014b50,true);c.setUint16(4,20,true);c.setUint16(6,20,true);c.setUint16(8,0x0800,true);c.setUint16(10,0,true);c.setUint16(12,time,true);c.setUint16(14,date,true);
+      c.setUint32(16,crc,true);c.setUint32(20,data.length,true);c.setUint32(24,data.length,true);c.setUint16(28,name.length,true);c.setUint32(42,off,true);
+      central.push(new Uint8Array(c.buffer),name);off+=30+name.length+data.length;}
+    const cs=central.reduce((s,a)=>s+a.length,0),e=new DataView(new ArrayBuffer(22));
+    e.setUint32(0,0x06054b50,true);e.setUint16(8,files.length,true);e.setUint16(10,files.length,true);e.setUint32(12,cs,true);e.setUint32(16,off,true);
+    return new Blob([...parts,...central,new Uint8Array(e.buffer)],{type});}
+  const xe=s=>String(s==null?"":s).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g,"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+  const kol=i=>{let s="";i++;while(i>0){const m=(i-1)%26;s=String.fromCharCode(65+m)+s;i=Math.floor((i-1)/26);}return s;};
+  const STYLES=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<fonts count="5"><font><sz val="10"/><name val="Arial"/></font><font><b/><sz val="10"/><name val="Arial"/></font><font><b/><sz val="14"/><name val="Arial"/></font><font><b/><sz val="10"/><color rgb="FFFFFFFF"/><name val="Arial"/></font><font><i/><sz val="9"/><color rgb="FF5D6876"/><name val="Arial"/></font></fonts>
+<fills count="4"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF1F5F8B"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFE3EEF6"/><bgColor indexed="64"/></patternFill></fill></fills>
+<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"><color rgb="FFC9D1DA"/></left><right style="thin"><color rgb="FFC9D1DA"/></right><top style="thin"><color rgb="FFC9D1DA"/></top><bottom style="thin"><color rgb="FFC9D1DA"/></bottom><diagonal/></border></borders>
+<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+<cellXfs count="8">
+<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
+<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/>
+<xf numFmtId="0" fontId="3" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf>
+<xf numFmtId="0" fontId="1" fillId="3" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf>
+<xf numFmtId="0" fontId="4" fillId="0" borderId="0" xfId="0" applyFont="1"/>
+<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>
+<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="top"/></xf>
+</cellXfs>
+<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
+</styleSheet>`;
+  /* sheet: {nama, lebar:[..], baris:[[{v,s}|null]], gabung:[".."], beku:n, filter:"A4:K9", lanskap:bool} */
+  function sheetXml(sh){
+    let x=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">`;
+    x+=`<sheetViews><sheetView workbookViewId="0">${sh.beku?`<pane ySplit="${sh.beku}" topLeftCell="A${sh.beku+1}" activePane="bottomLeft" state="frozen"/>`:""}</sheetView></sheetViews>`;
+    x+=`<cols>${sh.lebar.map((w,i)=>`<col min="${i+1}" max="${i+1}" width="${w}" customWidth="1"/>`).join("")}</cols><sheetData>`;
+    sh.baris.forEach((row,ri)=>{x+=`<row r="${ri+1}">`;(row||[]).forEach((c,ci)=>{if(!c)return;const ref=kol(ci)+(ri+1),s=c.s?` s="${c.s}"`:"";
+      if(typeof c.v==="number")x+=`<c r="${ref}"${s}><v>${c.v}</v></c>`;
+      else if(c.v===""||c.v==null)x+=`<c r="${ref}"${s}/>`;
+      else x+=`<c r="${ref}"${s} t="inlineStr"><is><t xml:space="preserve">${xe(c.v)}</t></is></c>`;});x+=`</row>`;});
+    x+=`</sheetData>`;
+    if(sh.filter)x+=`<autoFilter ref="${sh.filter}"/>`;
+    if(sh.gabung&&sh.gabung.length)x+=`<mergeCells count="${sh.gabung.length}">${sh.gabung.map(m=>`<mergeCell ref="${m}"/>`).join("")}</mergeCells>`;
+    x+=`<pageMargins left="0.5" right="0.5" top="0.6" bottom="0.6" header="0.3" footer="0.3"/><pageSetup paperSize="9" orientation="${sh.lanskap?"landscape":"portrait"}" fitToHeight="0"/></worksheet>`;
+    return x;}
+  function xlsx(sh){
+    const nama=sh.nama.replace(/[\[\]:*?\/\\]/g," ").slice(0,31);
+    return zip([
+      {name:"[Content_Types].xml",data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>`},
+      {name:"_rels/.rels",data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`},
+      {name:"xl/workbook.xml",data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="${xe(nama)}" sheetId="1" r:id="rId1"/></sheets></workbook>`},
+      {name:"xl/_rels/workbook.xml.rels",data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`},
+      {name:"xl/styles.xml",data:STYLES},
+      {name:"xl/worksheets/sheet1.xml",data:sheetXml(sh)}
+    ],"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");}
+  const c=(v,s)=>({v,s});
+
+  function xlsxSurat(r){
+    const rows=[[c("PERPUSTAKAAN RONA ILMU · SRMP 9 BANDUNG",1)],[c("Bukti Penomoran Surat Keluar",6)],[]];
+    baris(r).forEach(([k,v])=>rows.push([c(k,4),c(v==null?"":String(v),3)]));
+    rows.push([],[c("Diunduh dari Agenda Surat Keluar Perpustakaan Rona Ilmu, "+sekarang(),5)]);
+    return xlsx({nama:"Keterangan Surat",lebar:[24,70],baris:rows,gabung:["A1:B1","A2:B2"]});}
+
+  function xlsxAgenda(list,ket){
+    const H=["No. Urut","Nomor Surat","Tanggal Surat","Jenis Dokumen","Perihal","Tujuan / Penerima","Penandatangan","Status","Lokasi Arsip","Catatan","Dicatat Oleh","Dicatat Pada"];
+    const rows=[[c("AGENDA SURAT KELUAR · PERPUSTAKAAN RONA ILMU SRMP 9 BANDUNG",1)],[c((ket?ket+" · ":"")+"diunduh "+sekarang(),5)],[],H.map(h=>c(h,2))];
+    list.forEach(r=>rows.push([c(Number(r.urut)||0,7),c(r.nomor,3),c(tglIndo(r.tanggal),3),c(r.jenis,3),c(r.perihal,3),c(r.tujuan,3),
+      c(r.penandatangan||"",3),c(r.status,3),c(r.arsip||"",3),c(r.catatan||"",3),c(r.dicatatOleh||"",3),c(waktuIndo(r.dibuatPada),3)]));
+    return xlsx({nama:"Agenda",lebar:[9,32,16,24,44,26,22,14,22,30,18,26],baris:rows,gabung:["A1:L1","A2:L2"],beku:4,
+      filter:"A4:L"+Math.max(4,rows.length),lanskap:true});}
+
+  window.Ekspor={pdfSurat,pdfAgenda,xlsxSurat,xlsxAgenda};
+})();
+</script>
+<script>
 /* ===================== PENGATURAN =====================
    API_URL   : URL aplikasi web Google Apps Script (berakhiran /exec)
    SHEET_URL : alamat Google Spreadsheet agenda (opsional, untuk tombol "Buka spreadsheet")
@@ -192,7 +420,10 @@ tbody tr.batal td.perihal{text-decoration:line-through}
 window.AGENDA_CONFIG = {
   API_URL: "",
   SHEET_URL: "",
-  REFRESH_DETIK: 15
+  REFRESH_DETIK: 15,
+  // Penanda tangan pada lembar PDF bukti penomoran surat
+  KEPALA_NAMA: "Poppy Mega Karina, S.S., Gr.",
+  KEPALA_NIP: "20000092320252007"
 };
 </script>
 <script>
@@ -288,7 +519,12 @@ window.AGENDA_CONFIG = {
       const tj=td(r.tujuan);const tt=document.createElement("div");tt.className="who";tt.textContent="TTD: "+(r.penandatangan||"Kepala Perpustakaan");tj.appendChild(tt);
       const st=td("");const p=document.createElement("span");p.className="pill s-"+r.status;p.textContent=r.status;st.appendChild(p);
       td(r.dicatatOleh||"-","who");
-      const a=td("");if(kunci){const b=document.createElement("button");b.className="rowbtn";b.type="button";b.textContent="Ubah";b.onclick=()=>openForm(r);a.appendChild(b);}
+      const a=td("");const wrapA=document.createElement("div");wrapA.className="rowacts";a.appendChild(wrapA);
+      const tombol=(t,cls,judul,fn)=>{const b=document.createElement("button");b.className="rowbtn "+cls;b.type="button";b.textContent=t;b.title=judul;b.onclick=fn;wrapA.appendChild(b);};
+      tombol("PDF","dl","Unduh bukti penomoran surat ini (PDF)",()=>unduhSurat(r,"pdf"));
+      tombol("Excel","dl","Unduh keterangan surat ini (Excel)",()=>unduhSurat(r,"xlsx"));
+      if(BISA_BAGIKAN)tombol("Bagikan","dl","Bagikan PDF surat ini lewat WhatsApp, email, dan lainnya",()=>bagikanSurat(r));
+      if(kunci)tombol("Ubah","","Ubah catatan surat",()=>openForm(r));
       tb.appendChild(tr);
     });
     const em=$("empty");em.hidden=list.length>0;em.innerHTML="";
@@ -339,14 +575,27 @@ window.AGENDA_CONFIG = {
     finally{$("btnSave").disabled=false;$("btnSave").textContent="Simpan";}
   });
 
-  $("btnCsv").onclick=()=>{
-    const esc=v=>'"'+String(v==null?"":v).replace(/"/g,'""')+'"';
-    const head=["No. urut","Nomor surat","Tanggal","Jenis","Perihal","Tujuan","Penandatangan","Status","Lokasi arsip","Catatan","Dicatat oleh"];
-    const fy=$("fYear").value;const list=rows.filter(r=>!fy||String(r.tahun)===fy).slice().sort((a,b)=>a.tahun-b.tahun||a.urut-b.urut);
-    const csv="﻿"+[head.map(esc).join(",")].concat(list.map(r=>[r.urut,r.nomor,r.tanggal,r.jenis,r.perihal,r.tujuan,r.penandatangan,r.status,r.arsip,r.catatan,r.dicatatOleh].map(esc).join(","))).join("\r\n");
-    const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));
-    a.download="Agenda_Surat_Keluar_"+(fy||"semua")+".csv";document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},500);
-  };
+  /* ---- Unduh & bagikan ---- */
+  const BISA_BAGIKAN=(()=>{try{return !!(navigator.canShare&&navigator.canShare({files:[new File(["x"],"x.pdf",{type:"application/pdf"})]}));}catch(e){return false;}})();
+  const namaFile=(r,ext)=>"Surat_"+String(r.nomor).replace(/[\/:*?"<>|]+/g,"-")+"."+ext;
+  function simpanFile(blob,nama){
+    const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=nama;document.body.appendChild(a);a.click();
+    setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},2000);toast("Mengunduh "+nama);}
+  function unduhSurat(r,ext){
+    try{simpanFile(ext==="pdf"?Ekspor.pdfSurat(r,CFG):Ekspor.xlsxSurat(r),namaFile(r,ext));}
+    catch(e){toast("File belum bisa dibuat. Muat ulang halaman, lalu coba lagi.");}}
+  async function bagikanSurat(r){
+    const blob=Ekspor.pdfSurat(r,CFG),f=new File([blob],namaFile(r,"pdf"),{type:"application/pdf"});
+    try{await navigator.share({files:[f],title:"Surat "+r.nomor,text:"Bukti penomoran surat "+r.nomor+" – "+r.perihal});}
+    catch(e){if(!e||e.name!=="AbortError")simpanFile(blob,f.name);}}
+  function keteranganFilter(n){
+    const fy=$("fYear").value,fm=$("fMonth").value,fj=$("fJenis").value,fs=$("fStatus").value,q=$("fQ").value.trim();
+    const bag=[fy?"Tahun "+fy:"Semua tahun"];if(fm)bag.push(BULAN[Number(fm)-1]);if(fj)bag.push(fj);if(fs)bag.push("Status "+fs);if(q)bag.push('Pencarian "'+q+'"');
+    bag.push(n+" surat");return bag.join(" · ");}
+  function daftarUrut(){return filtered().slice().sort((a,b)=>a.tahun-b.tahun||a.urut-b.urut);}
+  function namaAgenda(ext){const fy=$("fYear").value,fm=$("fMonth").value;return "Agenda_Surat_Keluar_"+(fy||"semua")+(fm?"-"+String(fm).padStart(2,"0"):"")+"."+ext;}
+  $("btnXls").onclick=()=>{const l=daftarUrut();try{simpanFile(Ekspor.xlsxAgenda(l,keteranganFilter(l.length)),namaAgenda("xlsx"));}catch(e){toast("File belum bisa dibuat. Coba lagi.");}};
+  $("btnPdf").onclick=()=>{const l=daftarUrut();try{simpanFile(Ekspor.pdfAgenda(l,keteranganFilter(l.length)),namaAgenda("pdf"));}catch(e){toast("File belum bisa dibuat. Coba lagi.");}};
 
   function tampilSaya(){
     const m=$("me");m.hidden=false;m.textContent="Pencatat: "+nama;
