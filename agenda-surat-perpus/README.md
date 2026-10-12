@@ -3,7 +3,7 @@
 Web pencatatan surat dan dokumen keluar perpustakaan yang tersinkron dengan **Google Spreadsheet**.
 
 - Surat yang diinput di web langsung tersimpan sebagai baris baru di sheet **Agenda**.
-- Perubahan status atau perihal yang dilakukan langsung di spreadsheet tampil di web dalam ±15 detik.
+- Surat yang dicatat petugas lain dan perubahan langsung di spreadsheet tampil di semua perangkat dalam ±8 detik.
 - Nomor surat dibuat otomatis dengan format `001/9.9.9/PERPUS-SRMP9/10/2026`.
   - Bulan ditulis dengan angka biasa, bukan angka Romawi.
   - Nomor urut dimulai lagi dari 001 setiap tahun.
@@ -41,16 +41,17 @@ Web pencatatan surat dan dokumen keluar perpustakaan yang tersinkron dengan **Go
    - Yang memiliki akses: **Siapa saja**
 6. Tekan **Terapkan**, lalu salin **URL aplikasi web** yang berakhiran `/exec`.
 
-### 3. Sambungkan web
+### 3. Sambungkan web (tanpa mengedit kode)
 
-Buka `index.html` dengan Notepad atau editor teks. Cari bagian **PENGATURAN** di dekat bagian bawah file, lalu isi:
+1. Buka web agenda, lalu klik **Sambungan spreadsheet**.
+2. Tempel **URL aplikasi web** (berakhiran `/exec`) di kolom pertama. Link Google Spreadsheet boleh diisi di kolom kedua untuk tombol "Buka spreadsheet".
+3. Klik **Uji & simpan**. Jika berhasil, muncul **Tautan untuk petugas lain**. Klik **Salin**, lalu kirim tautan itu ke petugas (misalnya lewat WhatsApp).
+4. Klik **Mulai gunakan**, lalu masuk dengan nama dan kunci akses.
+5. Jika sebelumnya ada surat yang dicatat di mode sementara, klik **Kirim ke spreadsheet** pada pemberitahuan yang muncul.
 
-```js
-API_URL: "https://script.google.com/macros/s/AKfycb.../exec",
-SHEET_URL: "https://docs.google.com/spreadsheets/d/.../edit",
-```
+Petugas lain cukup membuka tautan tersebut sekali di perangkat mereka. Sambungan langsung tersimpan, lalu mereka masuk dengan nama dan kunci akses.
 
-Simpan file. Web sudah bisa dipakai dengan membuka `index.html` di Chrome atau browser lain.
+Cara lain: isi `API_URL` dan `SHEET_URL` di bagian **PENGATURAN** pada `index.html`. Dengan cara ini semua perangkat otomatis tersambung tanpa tautan khusus.
 
 ### 4. (Opsional) Pasang di GitHub Pages agar punya alamat web
 
@@ -74,4 +75,4 @@ Kirim alamat web (atau file `index.html`) dan kunci akses kepada petugas. Saat p
 
 - Jangan menulis kunci akses di `index.html` atau di GitHub. Kunci hanya disimpan di Apps Script.
 - **Mengganti kunci**: ubah `KUNCI_AWAL`, lalu jalankan lagi fungsi **siapkan**. Data yang sudah ada tidak terhapus.
-- **Jika `Code.gs` diubah**: pilih **Terapkan → Kelola deployment → Edit → Versi baru** agar URL tetap sama.
+- **Jika `Code.gs` diperbarui** (misalnya versi yang mendukung "Kirim ke spreadsheet"): pilih **Terapkan → Kelola deployment → Edit → Versi baru** agar URL tetap sama.

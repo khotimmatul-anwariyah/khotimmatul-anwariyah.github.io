@@ -30,6 +30,7 @@ function siapkan() {
   sh.setFrozenRows(1);
   sh.getRange('A:A').setNumberFormat('@'); // id disimpan sebagai teks
   sh.getRange('E:F').setNumberFormat('@'); // tanggal (yyyy-mm-dd) dan nomor surat sebagai teks
+  sh.getRange('O:P').setNumberFormat('@'); // waktu dicatat dan diubah sebagai teks
   PropertiesService.getScriptProperties().setProperty('KUNCI_AKSES', KUNCI_AWAL);
   Logger.log('Siap. Kunci akses tersimpan.');
 }
@@ -67,7 +68,7 @@ function doGet(e) {
   return json_({ ok: true, data: semuaBaris_(), waktu: new Date().toISOString() });
 }
 
-/** POST {kunci, aksi: 'tambah'|'ubah', data} */
+/** POST {kunci, aksi: 'tambah'|'ubah'|'impor', data} */
 function doPost(e) {
   let body;
   try { body = JSON.parse(e.postData.contents); } catch (err) { return json_({ ok: false, pesan: 'Permintaan tidak valid.' }); }
@@ -82,6 +83,7 @@ function doPost(e) {
   try {
     if (body.aksi === 'tambah') return json_(tambah_(d));
     if (body.aksi === 'ubah') return json_(ubah_(d));
+    if (body.aksi === 'impor') return json_(impor_(d));
     return json_({ ok: false, pesan: 'Aksi tidak dikenal.' });
   } finally {
     lock.releaseLock();
@@ -127,4 +129,36 @@ function ubah_(d) {
   });
   sh.getRange(baris, KOLOM.indexOf('diubahPada') + 1).setValue(new Date().toISOString());
   return { ok: true };
+}
+
+/** Memindahkan surat yang dicatat di mode sementara (di satu perangkat) ke spreadsheet.
+ *  Nomor yang sudah dipakai di spreadsheet tidak ditimpa dan dilaporkan sebagai bentrok. */
+function impor_(d) {
+  const list = Array.isArray(d.rows) ? d.rows.slice(0, 500) : [];
+  const ada = semuaBaris_();
+  const ids = {}; ada.forEach(r => ids[r.id] = true);
+  const sh = sheet_();
+  const now = new Date().toISOString();
+  let masuk = 0; const bentrok = [];
+  list.forEach(x => {
+    const tanggal = bersih_(x.tanggal, 10);
+    const urut = Number(x.urut) || 0;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(tanggal) || urut < 1) return;
+    const tahun = Number(tanggal.slice(0, 4)), bulan = Number(tanggal.slice(5, 7));
+    const id = tahun + '-' + ('00' + urut).slice(-3);
+    const nomor = ('00' + urut).slice(-3) + '/9.9.9/PERPUS-SRMP9/' + bulan + '/' + tahun;
+    if (ids[id]) { bentrok.push(nomor); return; }
+    const row = {
+      id, urut, tahun, bulan, tanggal, nomor,
+      jenis: bersih_(x.jenis, 80), perihal: bersih_(x.perihal), tujuan: bersih_(x.tujuan, 200),
+      penandatangan: bersih_(x.penandatangan, 120) || 'Kepala Perpustakaan',
+      status: STATUS.indexOf(x.status) >= 0 ? x.status : 'Draf',
+      arsip: bersih_(x.arsip, 200), catatan: bersih_(x.catatan), dicatatOleh: bersih_(x.dicatatOleh, 80),
+      dibuatPada: bersih_(x.dibuatPada, 40) || now, diubahPada: bersih_(x.diubahPada, 40)
+    };
+    sh.appendRow(KOLOM.map(k => row[k]));
+    sh.getRange(sh.getLastRow(), 5).setNumberFormat('@').setValue(tanggal);
+    ids[id] = true; masuk++;
+  });
+  return { ok: true, masuk: masuk, bentrok: bentrok };
 }

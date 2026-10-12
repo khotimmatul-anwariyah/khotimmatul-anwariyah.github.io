@@ -39,6 +39,19 @@ a.btn{text-decoration:none;display:inline-block}
 .btn:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 .btn:disabled{opacity:.5;cursor:not-allowed}
+.btn.danger{color:var(--bad);border-color:var(--bad)}
+.notice{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center}
+.notice .btn{padding:6px 12px;font-size:13px}
+.ok{color:var(--ok);font-size:13px}
+label .opt{font-weight:400;color:var(--muted)}
+details.cara{background:var(--soft);border-radius:8px;padding:10px 12px;font-size:13px}
+details.cara summary{cursor:pointer;font-weight:600;color:var(--accent)}
+details.cara ol{margin:8px 0 0;padding-left:20px;display:grid;gap:4px}
+.share{display:grid;gap:8px;background:var(--ok-soft);border-radius:8px;padding:12px}
+.share .row{display:flex;gap:8px}
+.share input{font-family:var(--mono);font-size:12.5px}
+.conn{font-size:12.5px;font-weight:600;border-radius:999px;padding:3px 10px;background:var(--warn-soft);color:var(--warn)}
+.conn.on{background:var(--ok-soft);color:var(--ok)}
 .actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .format{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:14px 16px;display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center}
 .format code{font-family:var(--mono);font-size:16px;font-weight:600;color:var(--accent)}
@@ -107,6 +120,8 @@ tbody tr.batal td.perihal{text-decoration:line-through}
     <div class="actions">
       <span class="live" id="live"><span class="dot"></span><span id="liveText">Belum terhubung</span></span>
       <span class="me" id="me" hidden></span>
+      <span class="conn" id="connBadge">Belum tersambung</span>
+      <button class="btn" id="btnSambung" type="button">Sambungan spreadsheet</button>
       <a class="btn" id="btnSheet" href="#" target="_blank" rel="noopener" hidden>Buka spreadsheet</a>
       <button class="btn" id="btnXls" title="Unduh daftar surat sesuai filter dalam format Excel">Unduh Excel</button>
       <button class="btn" id="btnPdf" title="Unduh daftar surat sesuai filter dalam format PDF">Unduh PDF</button>
@@ -119,7 +134,7 @@ tbody tr.batal td.perihal{text-decoration:line-through}
     <span>Nomor urut dibuat otomatis dan dimulai lagi dari 001 setiap tahun. Bulan ditulis dengan angka biasa, bukan angka Romawi. Ditandatangani Kepala Perpustakaan.</span>
   </div>
 
-  <div id="notice" class="notice" hidden></div>
+  <div id="notice" class="notice" hidden><span id="noticeText"></span><button type="button" class="btn" id="noticeBtn" hidden></button></div>
 
   <div class="stats">
     <div class="stat"><div class="k" id="kYear">Tahun ini</div><div class="v" id="sYear">0</div></div>
@@ -183,6 +198,39 @@ tbody tr.batal td.perihal{text-decoration:line-through}
     <div class="foot">
       <button type="button" class="btn" id="btnCancel">Batal</button>
       <button type="submit" class="btn primary" id="btnSave">Simpan</button>
+    </div>
+  </form>
+</div>
+<!-- Sambungan spreadsheet -->
+<div class="overlay" id="sambungOverlay" hidden>
+  <form class="dialog" id="sambungForm" novalidate>
+    <h2>Sambungan Google Spreadsheet</h2>
+    <p class="help">Setelah tersambung, surat yang dicatat petugas mana pun langsung tersimpan di spreadsheet dan muncul di semua perangkat dalam beberapa detik.</p>
+    <label>URL Aplikasi Web Apps Script <span class="opt">(wajib, berakhiran /exec)</span>
+      <input id="sApi" type="url" inputmode="url" autocomplete="off" placeholder="https://script.google.com/macros/s/…/exec"></label>
+    <label>Link Google Spreadsheet <span class="opt">(opsional, untuk tombol "Buka spreadsheet")</span>
+      <input id="sSheet" type="url" inputmode="url" autocomplete="off" placeholder="https://docs.google.com/spreadsheets/d/…/edit"></label>
+    <div class="err" id="sErr"></div>
+    <div class="share" id="sBagi" hidden>
+      <div class="ok" id="sOk">Tersambung ke spreadsheet.</div>
+      <label>Tautan untuk petugas lain<span class="opt"> — buka sekali di perangkat mereka, sambungan langsung tersimpan</span></label>
+      <div class="row"><input id="sLink" readonly aria-label="Tautan untuk petugas lain"><button type="button" class="btn" id="sSalin">Salin</button></div>
+    </div>
+    <details class="cara"><summary>Cara mendapatkan URL Apps Script</summary>
+      <ol>
+        <li>Buka Google Spreadsheet agenda (dari template <b>Template_Agenda_Surat_Keluar.xlsx</b>).</li>
+        <li>Pilih <b>Ekstensi → Apps Script</b>, tempel isi <b>Code.gs</b>, lalu ganti kunci akses pada baris <code>KUNCI_AWAL</code>.</li>
+        <li>Pilih fungsi <b>siapkan</b>, tekan <b>Jalankan</b>, dan izinkan akses.</li>
+        <li>Pilih <b>Terapkan → Deployment baru → Aplikasi web</b>. Jalankan sebagai: <b>Saya</b>. Yang memiliki akses: <b>Siapa saja</b>.</li>
+        <li>Salin <b>URL aplikasi web</b> (berakhiran <code>/exec</code>) ke kolom di atas.</li>
+      </ol>
+      <p class="help" style="margin-top:8px">Link spreadsheet biasa (docs.google.com) tidak bisa dipakai untuk menyimpan data dari web. Yang dibutuhkan adalah URL Apps Script.</p>
+    </details>
+    <div class="foot">
+      <button type="button" class="btn danger" id="sPutus" hidden>Putuskan sambungan</button>
+      <span style="flex:1"></span>
+      <button type="button" class="btn" id="sTutup">Tutup</button>
+      <button type="submit" class="btn primary" id="sSimpan">Uji &amp; simpan</button>
     </div>
   </form>
 </div>
@@ -420,7 +468,7 @@ tbody tr.batal td.perihal{text-decoration:line-through}
 window.AGENDA_CONFIG = {
   API_URL: "",
   SHEET_URL: "",
-  REFRESH_DETIK: 15,
+  REFRESH_DETIK: 8,
   // Penanda tangan pada lembar PDF bukti penomoran surat
   KEPALA_NAMA: "Poppy Mega Karina, S.S., Gr.",
   KEPALA_NIP: "20000092320252007"
@@ -429,8 +477,24 @@ window.AGENDA_CONFIG = {
 <script>
 (function(){
   const CFG = window.AGENDA_CONFIG || {};
-  const PESAN_LOKAL="Mode sementara: surat yang dicatat tersimpan di browser perangkat ini saja dan belum masuk ke Google Spreadsheet. Isi API_URL di bagian PENGATURAN agar data tersinkron untuk semua petugas.";
-  const API = (CFG.API_URL || "").trim();
+  const PESAN_LOKAL="Mode sementara: surat yang dicatat hanya tersimpan di perangkat ini dan belum terlihat oleh petugas lain. Sambungkan ke Google Spreadsheet agar data tersinkron di semua perangkat.";
+  /* Sambungan: dari PENGATURAN di kode, dari tautan petugas (#api=...), atau dari isian "Sambungan spreadsheet" */
+  const KEY_SAMBUNG="agenda_sambungan";
+  const RE_EXEC=/^https:\/\/script\.google\.com\/(a\/[^/]+\/)?macros\/s\/[A-Za-z0-9_-]+\/exec\/?$/;
+  const RE_SHEET=/^https:\/\/docs\.google\.com\/spreadsheets\/d\/[A-Za-z0-9_-]+/;
+  function bacaSambungan(){try{return JSON.parse(localStorage.getItem(KEY_SAMBUNG)||"{}")||{};}catch(e){return {};}}
+  function simpanSambungan(o){try{localStorage.setItem(KEY_SAMBUNG,JSON.stringify(o));return true;}catch(e){return false;}}
+  let dariTautan=false;
+  (function(){
+    if(!location.hash||location.hash.indexOf("api=")<0)return;
+    const q=new URLSearchParams(location.hash.slice(1)),api=(q.get("api")||"").trim(),sheet=(q.get("sheet")||"").trim();
+    if(RE_EXEC.test(api)){simpanSambungan({api,sheet:RE_SHEET.test(sheet)?sheet:""});dariTautan=true;}
+    try{history.replaceState(null,"",location.pathname+location.search);}catch(e){}
+  })();
+  const SAMBUNG=bacaSambungan();
+  const DARI_KODE=!!(CFG.API_URL||"").trim();
+  const API=((CFG.API_URL||"").trim()||(RE_EXEC.test(SAMBUNG.api||"")?SAMBUNG.api:"")).replace(/\/$/,"");
+  const SHEET=(CFG.SHEET_URL||"").trim()||SAMBUNG.sheet||"";
   const JENIS=["Surat dinas","SOP","Surat keterangan bebas pustaka","Surat undangan","Surat pemberitahuan","Laporan","Lainnya"];
   const STATUS=["Draf","Ditandatangani","Terkirim","Dibatalkan"];
   const BULAN=["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
@@ -450,7 +514,8 @@ window.AGENDA_CONFIG = {
   $("kYear").textContent="Tahun "+Y; $("kMonth").textContent=BULAN[M-1]+" "+Y;
 
   function toast(t){const e=$("toast");e.textContent=t;e.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>e.hidden=true,2800);}
-  function notice(t){$("notice").textContent=t||"";$("notice").hidden=!t;}
+  function notice(t,label,fn){$("noticeText").textContent=t||"";$("notice").hidden=!t;const b=$("noticeBtn");
+    if(t&&label){b.textContent=label;b.onclick=fn;b.hidden=false;}else{b.hidden=true;b.onclick=null;}}
   function live(on,text){$("live").classList.toggle("on",on);$("liveText").textContent=text;}
 
   /* ---- Mode lokal: dipakai selama API_URL belum diisi. Data tersimpan di browser perangkat ini saja. ---- */
@@ -489,7 +554,8 @@ window.AGENDA_CONFIG = {
       if(!res.ok){ if(/kunci/i.test(res.pesan||"")){keluar("Kunci akses tidak berlaku lagi. Masuk kembali.");} else notice(res.pesan); return; }
       rows=(res.data||[]).sort((a,b)=>(b.tahun-a.tahun)||(b.urut-a.urut));
       const t=new Date();live(true,(LOKAL?"Tersimpan di perangkat ini · ":"Diperbarui ")+String(t.getHours()).padStart(2,"0")+"."+String(t.getMinutes()).padStart(2,"0"));
-      notice(LOKAL?PESAN_LOKAL:"");render();if(!$("overlay").hidden)updatePreview();
+      if(LOKAL)notice(PESAN_LOKAL,"Sambungkan sekarang",bukaSambung);else if(!tawarImpor()&&!pesanTetap)notice("");
+      render();if(!$("overlay").hidden)updatePreview();
     }catch(e){live(false,"Terputus");if(!diam)notice("Tidak dapat terhubung ke Google Sheets. Periksa koneksi internet, lalu muat ulang halaman.");}
     finally{loading=false;}
   }
@@ -624,11 +690,66 @@ window.AGENDA_CONFIG = {
     clearInterval(timer);timer=setInterval(()=>{if(!document.hidden)muat(true);},Math.max(5,CFG.REFRESH_DETIK||15)*1000);
   }
   document.addEventListener("visibilitychange",()=>{if(!document.hidden&&kunci)muat(true);});
+  window.addEventListener("focus",()=>{if(kunci)muat(true);});
 
-  if(CFG.SHEET_URL){$("btnSheet").href=CFG.SHEET_URL;$("btnSheet").hidden=false;}
+  /* ---- Dialog sambungan ---- */
+  function tautanPetugas(api,sheet){const q=new URLSearchParams();q.set("api",api);if(sheet)q.set("sheet",sheet);
+    return location.origin+location.pathname+"#"+q.toString();}
+  let siapMuatUlang=false;
+  function bukaSambung(){
+    $("sErr").textContent="";siapMuatUlang=false;$("sSimpan").textContent="Uji & simpan";
+    $("sApi").value=API;$("sSheet").value=SHEET;
+    $("sApi").disabled=$("sSheet").disabled=DARI_KODE;
+    $("sBagi").hidden=!API;if(API){$("sLink").value=tautanPetugas(API,SHEET);$("sOk").textContent=DARI_KODE?"Tersambung (diatur di PENGATURAN kode halaman).":"Perangkat ini tersambung ke spreadsheet.";}
+    $("sPutus").hidden=!API||DARI_KODE;$("sSimpan").hidden=DARI_KODE;
+    $("sambungOverlay").hidden=false;if(!DARI_KODE)$("sApi").focus();}
+  $("btnSambung").onclick=bukaSambung;
+  $("sTutup").onclick=()=>{$("sambungOverlay").hidden=true;};
+  $("sambungOverlay").addEventListener("click",e=>{if(e.target===$("sambungOverlay"))$("sambungOverlay").hidden=true;});
+  $("sSalin").onclick=async()=>{const v=$("sLink").value;try{await navigator.clipboard.writeText(v);toast("Tautan disalin. Kirim ke petugas lain.");}catch(e){$("sLink").select();toast("Tekan Ctrl+C untuk menyalin.");}};
+  $("sPutus").onclick=()=>{try{localStorage.removeItem(KEY_SAMBUNG);store.del("agenda_kunci");}catch(e){}location.reload();};
+  $("sambungForm").addEventListener("submit",async e=>{
+    e.preventDefault();
+    if(siapMuatUlang){location.reload();return;}
+    const api=$("sApi").value.trim().replace(/\/$/,""),sheet=$("sSheet").value.trim();const err=$("sErr");err.textContent="";
+    if(!api){err.textContent="Isi URL Aplikasi Web Apps Script terlebih dahulu.";return;}
+    if(RE_SHEET.test(api)){err.textContent="Ini link spreadsheet, bukan URL Apps Script. Tempel link ini di kolom kedua, lalu isi kolom pertama dengan URL aplikasi web berakhiran /exec (lihat cara di bawah).";$("sSheet").value=$("sSheet").value||api;$("sApi").value="";return;}
+    if(/\/dev\/?$/.test(api)){err.textContent="Ini URL percobaan (/dev). Gunakan URL dari Terapkan → Deployment baru, yang berakhiran /exec.";return;}
+    if(!RE_EXEC.test(api)){err.textContent="URL harus diawali https://script.google.com/macros/s/ dan berakhiran /exec.";return;}
+    if(sheet&&!RE_SHEET.test(sheet)){err.textContent="Link spreadsheet harus diawali https://docs.google.com/spreadsheets/d/";return;}
+    $("sSimpan").disabled=true;$("sSimpan").textContent="Menguji…";
+    try{
+      const r=await fetch(api+"?kunci=&t="+Date.now());const j=await r.json();
+      if(typeof j.ok!=="boolean")throw new Error("bukan agenda");
+      if(!simpanSambungan({api,sheet})){err.textContent="Browser ini tidak mengizinkan penyimpanan. Gunakan Chrome biasa, bukan mode penyamaran.";return;}
+      $("sOk").textContent="Berhasil tersambung. Bagikan tautan di bawah ke petugas lain.";$("sLink").value=tautanPetugas(api,sheet);$("sBagi").hidden=false;
+      siapMuatUlang=true;$("sSimpan").textContent="Mulai gunakan";
+    }catch(x){err.textContent="Tidak bisa terhubung ke Apps Script. Pastikan deployment memakai akses \"Siapa saja\", URL berakhiran /exec, dan Code.gs versi terbaru sudah diterapkan.";$("sSimpan").textContent="Uji & simpan";}
+    finally{$("sSimpan").disabled=false;}
+  });
+
+  /* ---- Kirim surat dari mode sementara ke spreadsheet ---- */
+  let pesanTetap=false;
+  function tawarImpor(){
+    if(LOKAL)return false;const lok=bacaLokal();if(!lok.length)return false;
+    notice(`Ada ${lok.length} surat dari mode sementara di perangkat ini yang belum masuk ke spreadsheet.`,"Kirim ke spreadsheet",kirimLokal);return true;}
+  async function kirimLokal(){
+    const lok=bacaLokal();if(!lok.length)return;$("noticeBtn").disabled=true;$("noticeBtn").textContent="Mengirim…";
+    try{const res=await apiPost("impor",{rows:lok});
+      if(!res.ok){notice(res.pesan||"Belum terkirim. Coba lagi.","Coba lagi",kirimLokal);return;}
+      try{localStorage.setItem(KEY_LOKAL+"_terkirim",JSON.stringify(lok));localStorage.removeItem(KEY_LOKAL);}catch(e){}
+      const b=res.bentrok||[];pesanTetap=true;
+      notice(b.length?`${res.masuk} surat terkirim. ${b.length} nomor tidak dikirim karena sudah dipakai di spreadsheet: ${b.join(", ")}.`:`${res.masuk} surat dari mode sementara sudah masuk ke spreadsheet.`);
+      await muat(true);
+    }catch(e){notice("Belum terkirim karena koneksi bermasalah.","Coba lagi",kirimLokal);}
+    finally{$("noticeBtn").disabled=false;}}
+
+  if(SHEET){$("btnSheet").href=SHEET;$("btnSheet").hidden=false;}
+  $("connBadge").textContent=LOKAL?"Belum tersambung":"Tersambung ke spreadsheet";$("connBadge").classList.toggle("on",!LOKAL);
+  if(dariTautan&&!LOKAL)toast("Perangkat ini sudah tersambung ke spreadsheet perpustakaan.");
   render();
   if(LOKAL){
-    notice(PESAN_LOKAL);$("helpData").textContent="Data sementara tersimpan di browser perangkat ini.";
+    notice(PESAN_LOKAL,"Sambungkan sekarang",bukaSambung);$("helpData").textContent="Data sementara tersimpan di browser perangkat ini.";
     $("lKunciWrap").hidden=true;$("loginHelp").textContent="Tulis nama Anda sebagai pencatat surat.";
     nama=store.get("agenda_nama");
     if(nama){kunci="lokal";mulai();} else $("loginOverlay").hidden=false;
@@ -636,6 +757,7 @@ window.AGENDA_CONFIG = {
   else{
     kunci=store.get("agenda_kunci");nama=store.get("agenda_nama");
     if(kunci&&nama)mulai(); else {$("lNama").value=nama;$("loginOverlay").hidden=false;}
+    tawarImpor();
   }
 })();
 </script>
